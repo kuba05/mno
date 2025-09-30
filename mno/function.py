@@ -40,7 +40,7 @@ class Function:
     def __call__(self, point: Vec) -> Vec:
         """Return function's value at a given point."""
         assert len(point) == self._dim_in, (
-            "When calling function, dimension of the argument was off."
+            f"When calling function, dimension of the argument was off. Expected {self._dim_in}, got {len(point)}."
         )
         return self._function(point)
 
@@ -100,5 +100,8 @@ class Function:
             )
 
         return Function(
-            helper, dim_in=self._dim_in, dim_out=self._dim_out, derivative=None
+            helper,
+            dim_in=self._dim_in,
+            dim_out=self._dim_out * self._dim_in,
+            derivative=None,
         )

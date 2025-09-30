@@ -1,37 +1,101 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import cast, overload
+
 from mno.function import Function
-from mno.stopping_condition import StoppingCondition
 from mno.my_types import Vec, float_to_vec
+from mno.stopping_condition import SmallChangeCondition, StoppingCondition
 
 
-def ternary_search(
-    function: Function,
-    stopping_condition: StoppingCondition,
-    point_a: Vec,
-    point_b: Vec,
-) -> Vec:
-    """Ternary search on a general function on a line between point_a and point_b."""
-    direction = point_b - point_a
+class Linesearch(ABC):
+    """Linesearch abc."""
 
-    def helper(k: Vec) -> Vec:
-        point = k[0] * direction + point_a
-        return function(point)
-
-    line_function = Function(function=helper, dim_in=1, dim_out=function.get_dim()[1])
-
-    left = float_to_vec(0)
-    right = float_to_vec(1)
-    prev_mid_point = None
-    while stopping_condition(
-        function=function,
-        cur_point=(left + right) / 2,
-        prev_point=prev_mid_point,
+    @overload
+    def __init__(self): ...
+    @overload
+    def __init__(self, function: Function): ...
+    @overload
+    def __init__(self, function: Function, points: tuple[Vec, Vec]): ...
+    def __init__(
+        self, function: Function | None = None, points: tuple[Vec, Vec] | None = None
     ):
-        prev_mid_point = (left + right) / 2
-        left_mid = (left + 2 * right) / 3
-        right_mid = (2 * left + right) / 3
-        if line_function(left_mid) > line_function(right_mid):
-            left = left_mid
-        else:
-            right = right_mid
+        """Create a linesearch object."""
+        self._stopping_condition = SmallChangeCondition()
+        if points is not None:
+            assert function is not None, (
+                "You need to provide a function to set interval!"
+            )
+            assert function.get_dim()[0] == len(points[0]), (
+                "First point doesn't match dimensions with function!"
+            )
+            assert function.get_dim()[0] == len(points[1]), (
+                "Second point doesn't match dimensions with function!"
+            )
+        self._function = function
+        self._points = points
 
-    return (left + right) / 2
+    def set_function(self, function: Function) -> Linesearch:
+        """Set function to optimize with out dim 1."""
+        assert function.get_dim()[1] == 1, "Function doesn't have outdim 1!"
+        self._function = function
+        return self
+
+    def set_stopping_condition(
+        self, stopping_condition: StoppingCondition
+    ) -> Linesearch:
+        """Set stopping condition for this linesearch."""
+        self.stopping_condition = stopping_condition
+        return self
+
+    def set_interval(self, point_a: Vec, point_b: Vec) -> Linesearch:
+        """Set interval on which linesearch should be done."""
+        assert self._function is not None, "You need to first set a function!"
+        assert len(point_a) == self._function.get_dim()[0], (
+            "Point a isn't a valid argument for set function as their dimensions don't match!"
+        )
+        assert len(point_b) == self._function.get_dim()[0], (
+            "Point b isn't a valid argument for set function as their dimensions don't match!"
+        )
+        self._points = [point_a, point_b]
+        return self
+
+    def solve(self) -> Vec:
+        """Return a solution to the set function using set stopping condition."""
+        assert self._function is not None, "You need to first set a function!"
+        assert self._points is not None, "You need to first set points!"
+        direction = self._points[1] - self._points[0]
+
+        def helper(k: Vec) -> Vec:
+            point = k[0] * direction + self._points[0]
+            return cast(Function, self._function)(point)
+
+        line_function = Function(function=helper, dim_in=1, dim_out=1)
+        return self._solve(line_function) * direction + self._points[0]
+
+    @abstractmethod
+    def _solve(self, function: Function) -> Vec:
+        """Optimize function R->R on the range (0,1)."""
+
+
+class TernarySearch(Linesearch):
+    """Find minimum using ternary search."""
+
+    def _solve(self, function: Function) -> Vec:
+        left = float_to_vec(0)
+        right = float_to_vec(1)
+        prev_mid_point = None
+        while self._stopping_condition(
+            function=function,
+            cur_point=(left + right) / 2,
+            prev_point=prev_mid_point,
+        ):
+            prev_mid_point = (left + right) / 2
+            left_mid = (left + 2 * right) / 3
+            right_mid = (2 * left + right) / 3
+            if function(left_mid) > function(right_mid):
+                left = left_mid
+            else:
+                right = right_mid
+
+        return (left + right) / 2
