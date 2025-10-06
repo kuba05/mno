@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from abc import ABC, abstractmethod
 from typing import cast, overload
 
@@ -52,10 +54,12 @@ class Linesearch(ABC):
         """Set interval on which linesearch should be done."""
         assert self._function is not None, "You need to first set a function!"
         assert len(point_a) == self._function.get_dim()[0], (
-            "Point a isn't a valid argument for set function as their dimensions don't match!"
+            "Point a isn't a valid argument for set function as their dimensions don't"
+            "match!"
         )
         assert len(point_b) == self._function.get_dim()[0], (
-            "Point b isn't a valid argument for set function as their dimensions don't match!"
+            "Point b isn't a valid argument for set function as their dimensions don't"
+            "match!"
         )
         self._points = [point_a, point_b]
         return self
@@ -99,3 +103,30 @@ class TernarySearch(Linesearch):
                 right = right_mid
 
         return (left + right) / 2
+
+
+class GoldenSearch(Linesearch):
+    """Golden ration search."""
+
+    invphi = (np.sqrt(5) - 1) / 2
+
+    def _solve(self, function: Function) -> Vec:
+        a = float_to_vec(0)
+        d = float_to_vec(1)
+        b = d - (d - a) * self.invphi
+        c = a - (d - a) * self.invphi
+        prev_mid_point = None
+        while self._stopping_condition(
+            function=function, cur_point=(a + d) / 2, prev_point=prev_mid_point
+        ):
+            prev_mid_point = (a + d) / 2
+            if function(b) < function(c):
+                d = c
+                c = b
+                b = d - (d - a) * self.invphi
+            else:
+                a = b
+                b = c
+                c = a - (d - a) * self.invphi
+
+        return (a + d) / 2
