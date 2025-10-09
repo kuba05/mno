@@ -13,20 +13,36 @@ class StoppingCondition:
         self._critical_value = critical_value
 
     def _should_stop(
-        self, _function: Function, _cur_point: Vec, _prev_point: Vec | None
+        self,
+        _function: Function,
+        _cur_point: Vec,
+        _prev_point: Vec | None,
+        iteration: int,
     ) -> bool:
         raise NotImplementedError
 
     def __call__(
-        self, function: Function, cur_point: Vec, prev_point: Vec | None
+        self, function: Function, cur_point: Vec, prev_point: Vec | None, iteration: int
     ) -> bool:
         """
         Check if the method should stop.
 
+        Returns true if it should stop.
+
         Recieves the function, for which minimum is to be found,
         and point at which the function is to be run.
         """
-        return self._should_stop(function, cur_point, prev_point)
+        return self._should_stop(function, cur_point, prev_point, iteration)
+
+
+class IterationCondition(StoppingCondition):
+    """Stopping condition checking gradient norm."""
+
+    @override
+    def _should_stop(
+        self, function: Function, cur_point: Vec, prev_point: Vec | None, iteration: int
+    ) -> bool:
+        return iteration >= 10**3
 
 
 class GradientNormCondition(StoppingCondition):
@@ -34,8 +50,10 @@ class GradientNormCondition(StoppingCondition):
 
     @override
     def _should_stop(
-        self, function: Function, cur_point: Vec, prev_point: Vec | None
+        self, function: Function, cur_point: Vec, prev_point: Vec | None, iteration: int
     ) -> bool:
+        if iteration >= 10**5:
+            return True
         grad = function.grad()(cur_point)
         return np.dot(grad, grad) < self._critical_value
 
@@ -45,8 +63,11 @@ class SmallChangeCondition(StoppingCondition):
 
     @override
     def _should_stop(
-        self, function: Function, cur_point: Vec, prev_point: Vec | None
+        self, function: Function, cur_point: Vec, prev_point: Vec | None, iteration: int
     ) -> bool:
+        if iteration >= 10**5:
+            return True
+
         if prev_point is None:
             return False
 

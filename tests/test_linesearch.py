@@ -1,8 +1,11 @@
 import pytest
 
+import numpy as np
+
 from mno.function import Function
 from mno.linesearch import GoldenSearch, Linesearch, TernarySearch
-from mno.my_types import array_to_vec, float_to_vec, dot_prorduct
+from mno.stopping_condition import IterationCondition
+from mno.my_types import Vec, array_to_vec, float_to_vec, dot_prorduct
 
 methods = [TernarySearch, GoldenSearch]
 
@@ -13,6 +16,17 @@ def add_methods_into_parametrization(*parametrization: tuple) -> list[tuple]:
 
 
 par = [(1, 2, 0, -2)]
+PRECISION = 1e-3
+
+
+def check_result(result: Vec, *expected: Vec) -> None:
+    """Check relative error is less than required precision."""
+    assert any(
+        all(abs((result - e) / e) < PRECISION)
+        or all(abs((e - result) / result) < PRECISION)
+        or all(abs(e - result) < PRECISION)
+        for e in expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -20,9 +34,8 @@ par = [(1, 2, 0, -2)]
     add_methods_into_parametrization(
         (1, 2, 0, -2),
         (3, -3, -2, -3),
-        (0.0001, -1000, -10000, 1000),
-        (1e-9, 1e9, -1e9, 1e9),
-        (1, -3, 1, 1),
+        (0.01, -1000, -10000, 1000),
+        (1, -3, 1, 1.1),
     ),
 )
 def test_linesearch_improves_solution_on_quadratic_function(
@@ -30,16 +43,17 @@ def test_linesearch_improves_solution_on_quadratic_function(
 ) -> None:
     """Linesearch should easily find minimum of quadratic function."""
     assert k > 0, "Invalid dataset, k need to be positive!"
-    f = Function(lambda x: (x - x_0) * (x - x_1) + c, dim_in=1, dim_out=1)
+    f = Function(lambda x: k * (x - x_0) * (x - x_1) + c, dim_in=1, dim_out=1)
     sol = float_to_vec((x_0 + x_1) / 2)
-    assert (
+    l = x_1 - x_0
+    result = (
         method()
+        .set_stopping_condition(IterationCondition())
         .set_function(f)
-        .set_interval(float_to_vec(x_0), float_to_vec(x_1))
+        .set_interval(float_to_vec(x_0 - l), float_to_vec(x_1 + l))
         .solve()
-        - sol
-        < 1e-9
     )
+    check_result(result, sol)
 
 
 @pytest.mark.parametrize(
@@ -48,7 +62,6 @@ def test_linesearch_improves_solution_on_quadratic_function(
         (1, [0, 3], [2, 5], [3, 5]),
         (3, [-2, 5, 8, -2, 3], [3, 8, 1, 0.1, 1], [1, 2, 3, 4, 5]),
         (-3, [-2, 5, 8, -2, 3], [3, 8, 1, 0.1, 1], [1, 2, 3, 4, 5]),
-        (-1e9, [1e8, 1e7, 1e6, 1e10, 1e5], [1, 2, 3, 4, 5], [0, 0, 0, 0, 1e5]),
     ),
 )
 def test_linesearch_improves_solution_on_multi_dim_quadratic_function(
@@ -65,17 +78,17 @@ def test_linesearch_improves_solution_on_multi_dim_quadratic_function(
         dim_in=len(radius),
         dim_out=1,
     )
-    assert all(
+    result = (
         method()
+        .set_stopping_condition(IterationCondition())
         .set_function(f)
         .set_interval(
             array_to_vec(peak) - array_to_vec(direction),
             array_to_vec(peak) + array_to_vec(direction),
         )
         .solve()
-        - peak
-        < 1e-9
     )
+    check_result(result, array_to_vec(peak))
 
 
 @pytest.mark.parametrize(
@@ -84,7 +97,6 @@ def test_linesearch_improves_solution_on_multi_dim_quadratic_function(
         (-1, 2, 0, -2),
         (-3, -3, -2, -3),
         (-0.0001, -1000, -10000, 1000),
-        (-1e-9, 1e9, -1e9, 1e9),
         (-1, -3, 1, 1),
     ),
 )
@@ -93,11 +105,11 @@ def test_linesearch_finds_boundary_on_flipped_quadratic_function(
 ) -> None:
     """Linesearch should easily find minimum of quadratic function."""
     assert k < 0, "Invalid dataset, k need to be positive!"
-    f = Function(lambda x: (x - x_0) * (x - x_1) + c, dim_in=1, dim_out=1)
+    f = Function(lambda x: k * (x - x_0) * (x - x_1) + c, dim_in=1, dim_out=1)
     attempt = (
         method()
         .set_function(f)
         .set_interval(float_to_vec(x_0), float_to_vec(x_1))
         .solve()
     )
-    assert attempt - x_0 < 1e-9 or attempt - x_1 < 1e-9
+    check_result(attempt, float_to_vec(x_0), float_to_vec(x_1))

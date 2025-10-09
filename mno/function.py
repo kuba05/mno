@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
 import numpy as np
 
-from mno.my_types import TYPE, Vec
+from mno.my_types import TYPE, Vec, float_to_vec
 
 
 class Function:
@@ -42,7 +43,16 @@ class Function:
         assert len(point) == self._dim_in, (
             f"When calling function, dimension of the argument was off. Expected {self._dim_in}, got {len(point)}."
         )
-        return self._function(point)
+        out = self._function(point)
+        if isinstance(out, (int, np.integer)):
+            out = float(out)
+        if isinstance(out, (float, np.floating)):
+            out = float_to_vec(out)
+        out = cast(Vec, out)
+        assert len(out) == self._dim_out, (
+            f"When calling function, dimension of the output was off. Expected {self._dim_out}, got {len(out)}"
+        )
+        return out
 
     def has_derivative(self) -> bool:
         """Check if function has symbolic derivative."""

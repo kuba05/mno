@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 
-TYPE = float
+TYPE = float | np.floating
 Vec = npt.NDArray
 
 
