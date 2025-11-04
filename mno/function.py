@@ -38,6 +38,32 @@ class Function:
         self._dim_out = dim_out
         self._derivative = derivative
 
+    def __neg__(self) -> Function:
+        """Unary minus."""
+        return self * -1
+
+    def __add__(self, other: Function | float) -> Function:
+        """Addition."""
+        if isinstance(other, Function):
+            assert self.get_dim() == other.get_dim()
+            return Function(
+                lambda a: self(a) + other(a), dim_in=self._dim_in, dim_out=self._dim_out
+            )
+        return Function(
+            lambda a: self(a) + other, dim_in=self._dim_in, dim_out=self._dim_out
+        )
+
+    def __mul__(self, other: Function | float) -> Function:
+        """Multiplication."""
+        if isinstance(other, Function):
+            assert self.get_dim() == other.get_dim()
+            return Function(
+                lambda a: self(a) * other(a), dim_in=self._dim_in, dim_out=self._dim_out
+            )
+        return Function(
+            lambda a: self(a) * other, dim_in=self._dim_in, dim_out=self._dim_out
+        )
+
     def __call__(self, point: Vec) -> Vec:
         """Return function's value at a given point."""
         assert len(point) == self._dim_in, (
@@ -91,17 +117,17 @@ class Function:
                     np.array(
                         [
                             self._function(
-                                point + step * np.eye(len(point), dtype=TYPE)
+                                point + step * np.eye(len(point), dtype=TYPE)[i]
                             )
-                            for _ in range(len(point))
+                            for i in range(len(point))
                         ]
                     )
                     - np.array(
                         [
                             self._function(
-                                point - step * np.eye(len(point), dtype=TYPE)
+                                point - step * np.eye(len(point), dtype=TYPE)[i]
                             )
-                            for _ in range(len(point))
+                            for i in range(len(point))
                         ]
                     )
                 ).reshape(-1)
