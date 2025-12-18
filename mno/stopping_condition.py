@@ -8,7 +8,7 @@ from my_types import Vec
 class StoppingCondition:
     """Abstract for a stopping condition for a numerical method."""
 
-    def __init__(self, critical_value: float = 1e-9):
+    def __init__(self, critical_value: float = 1e-8):
         """Stoping condition with some critical value."""
         self._critical_value = critical_value
 
@@ -42,6 +42,7 @@ class IterationCondition(StoppingCondition):
     def _should_stop(
         self, function: Function, cur_point: Vec, prev_point: Vec | None, iteration: int
     ) -> bool:
+        print("iteration", iteration)
         return iteration >= 10**3
 
 
@@ -52,7 +53,7 @@ class GradientNormCondition(StoppingCondition):
     def _should_stop(
         self, function: Function, cur_point: Vec, prev_point: Vec | None, iteration: int
     ) -> bool:
-        if iteration >= 10**5:
+        if iteration >= 10**3:
             return True
         grad = function.grad()(cur_point)
         return np.dot(grad, grad) < self._critical_value
@@ -65,7 +66,7 @@ class SmallChangeCondition(StoppingCondition):
     def _should_stop(
         self, function: Function, cur_point: Vec, prev_point: Vec | None, iteration: int
     ) -> bool:
-        if iteration >= 10**5:
+        if iteration >= 10**3:
             return True
 
         if prev_point is None:

@@ -1,13 +1,16 @@
 import pytest
 
-import numpy as np
-
+from mno.find_distance import GoldsteinTest
 from mno.function import Function
-from mno.linesearch import GoldenSearch, Linesearch, TernarySearch
-from mno.stopping_condition import IterationCondition
-from mno.my_types import Vec, array_to_vec, float_to_vec, dot_prorduct
+from mno.linesearch import GoldenSearch
+from mno.multidimensional import (
+    ConjugateGradient,
+    GradientDescend,
+    MultidimensionalOptimalization,
+)
+from mno.my_types import Vec, array_to_vec, dot_prorduct
 
-methods = [TernarySearch, GoldenSearch]
+methods = [GradientDescend, ConjugateGradient]
 
 
 def add_methods_into_parametrization(*parametrization: tuple) -> list[tuple]:
@@ -30,46 +33,19 @@ def check_result(result: Vec, *expected: Vec) -> None:
 
 
 @pytest.mark.parametrize(
-    ("method", "k", "c", "x_0", "x_1"),
-    add_methods_into_parametrization(
-        (1, 2, 0, -2),
-        (3, -3, -2, -3),
-        (0.01, -1000, -10000, 1000),
-        (1, -3, 1, 1.1),
-    ),
-)
-def test_linesearch_improves_solution_on_quadratic_function(
-    method: type[Linesearch], k: float, c: float, x_0: float, x_1: float
-) -> None:
-    """Linesearch should easily find minimum of quadratic function."""
-    assert k > 0, "Invalid dataset, k need to be positive!"
-    f = Function(lambda x: k * (x - x_0) * (x - x_1) + c, dim_in=1, dim_out=1)
-    sol = float_to_vec((x_0 + x_1) / 2)
-    l = x_1 - x_0
-    result = (
-        method()
-        .set_stopping_condition(IterationCondition())
-        .set_function(f)
-        .set_interval(float_to_vec(x_0 - l), float_to_vec(x_1 + l))
-        .solve()
-    )
-    check_result(result, sol)
-
-
-@pytest.mark.parametrize(
-    ("method", "c", "peak", "radius", "direction"),
+    ("method", "c", "peak", "radius", "point"),
     add_methods_into_parametrization(
         (1, [0, 3], [2, 5], [3, 5]),
         (3, [-2, 5, 8, -2, 3], [3, 8, 1, 0.1, 1], [1, 2, 3, 4, 5]),
         (-3, [-2, 5, 8, -2, 3], [3, 8, 1, 0.1, 1], [1, 2, 3, 4, 5]),
     ),
 )
-def test_linesearch_improves_solution_on_multi_dim_quadratic_function(
-    method: type[Linesearch],
+def test_multidim_finds_solution_on_multi_dim_quadratic_function(
+    method: type[MultidimensionalOptimalization],
     c: float,
     peak: list[float],
     radius: list[float],
-    direction: list[float],
+    point: list[float],
 ) -> None:
     """Check if linesearch properly works on multi dimensional functions."""
     assert all(r > 0 for r in radius), "Invalid dataset, k need to be positive!"
@@ -80,18 +56,64 @@ def test_linesearch_improves_solution_on_multi_dim_quadratic_function(
     )
     result = (
         method()
-        .set_stopping_condition(IterationCondition())
         .set_function(f)
-        .set_interval(
-            # make peak not be in the center
-            array_to_vec(peak) - 2 * array_to_vec(direction),
-            array_to_vec(peak) + array_to_vec(direction),
-        )
+        .set_point(array_to_vec(point))
+        .set_distance_finder(GoldsteinTest())
+        .set_linesearch(GoldenSearch())
+        # .set_stopping_condition(IterationCondition())
         .solve()
     )
     check_result(result, array_to_vec(peak))
 
 
+@pytest.mark.parametrize(
+    ("method", "function", "derivative", "point"),
+    add_methods_into_parametrization(
+        (
+            lambda a: (1.5 - a[0] + a[0] * a[1]) ** 2
+            + (2.25 - a[0] + a[0] * a[1] ** 2) ** 2
+            + (2.625 - a[0] + a[0] * a[1] ** 3) ** 2,
+            lambda a: array_to_vec(
+                [
+                    2 * (1.5 - a[0] + a[0] * a[1]) * (a[1] - 1)
+                    + 2 * (2.25 - a[0] + a[0] * a[1] ** 2) * (a[1] ** 2 - 1)
+                    + 2 * (2.625 - a[0] + a[0] * a[1] ** 3) * (a[1] ** 3 - 1),
+                    (1.5 - a[0] + a[0] * a[1]) * 2 * a[0]
+                    + (2.25 - a[0] + a[0] * a[1] ** 2) * 4 * a[0] * a[1]
+                    + (2.625 - a[0] + a[0] * a[1] ** 3) * 6 * a[0] * a[1] ** 2,
+                ]
+            ),
+            [0, 0],
+        )
+    ),
+)
+def test_multidim_finds_solution_on_multi_dim_arbitrary_function(
+    method: type[MultidimensionalOptimalization],
+    function: callable,
+    derivative: callable,
+    point: list[Vec],
+) -> None:
+    """Check if linesearch properly works on multi dimensional functions."""
+    f = Function(
+        function=function,
+        derivative=derivative,
+        dim_in=len(point),
+        dim_out=1,
+    )
+    result = (
+        method()
+        .set_function(f)
+        .set_point(array_to_vec(point))
+        .set_distance_finder(GoldsteinTest())
+        .set_linesearch(GoldenSearch())
+        # .set_stopping_condition(IterationCondition())
+        .solve()
+    )
+
+    assert all(abs(f.grad()(result)) < PRECISION)
+
+
+'''
 @pytest.mark.parametrize(
     ("method", "k", "c", "x_0", "x_1"),
     add_methods_into_parametrization(
@@ -101,7 +123,7 @@ def test_linesearch_improves_solution_on_multi_dim_quadratic_function(
         (-1, -3, 1, 1),
     ),
 )
-def test_linesearch_finds_boundary_on_flipped_quadratic_function(
+def test_multidim_finds_boundary_on_flipped_quadratic_function(
     method: type[Linesearch], k: float, c: float, x_0: float, x_1: float
 ) -> None:
     """Linesearch should easily find minimum of quadratic function."""
@@ -151,3 +173,4 @@ def test_linesearch_finds_local_minimum(
         assert f(attempt - direction * STEP) > f(attempt)
     if k < 1 - STEP:
         assert f(attempt + direction * STEP) > f(attempt)
+'''

@@ -76,7 +76,7 @@ class Function:
             out = float_to_vec(out)
         out = cast(Vec, out)
         assert len(out) == self._dim_out, (
-            f"When calling function, dimension of the output was off. Expected {self._dim_out}, got {len(out)}"
+            f"When calling function, dimension of the output was off. Expected {self._dim_out}, got {len(out)}. Preciselly, got {out}"
         )
         return out
 

@@ -15,17 +15,15 @@ class FindDistance(ABC):
         self, function: Function, point: Vec, direction: Vec
     ) -> tuple[Vec, Vec]:
         """Find optimal interval given by two points A B to find minimum on."""
+        assert not any(np.isnan(direction)), "Direction Nan!"
+        print("direction is ", direction)
 
         def help(a):
-            print(a, direction, point)
-            print(a * direction)
             out = function(a * direction + point)
-            print(out)
             return out
 
         helper = Function(help, dim_in=1, dim_out=1)
         out = self._call(helper)
-        print(len(direction), len(point))
         return (point + out[0] * direction, point + out[1] * direction)
 
     def __call__(self, function: Function) -> tuple[Vec, Vec]:
@@ -47,7 +45,11 @@ class FindDistance(ABC):
 
 def step_doubling(condition: Callable[[Vec], bool], value: Vec) -> Vec:
     """Find "minimal" solution to condition via step doubling."""
+    iteration = 0
     while not condition(value):
+        iteration += 1
+        if iteration > 200:
+            raise ValueError("Can't seem to terminate")
         assert not np.isinf(value), "Infinity!"
         value *= 2
     return value
@@ -55,8 +57,12 @@ def step_doubling(condition: Callable[[Vec], bool], value: Vec) -> Vec:
 
 def step_halving(condition: Callable[[Vec], bool], value: Vec) -> Vec:
     """Find "maximal" solution to condition via step halving."""
+    iteration = 0
     while not condition(value):
-        if value < 1e-15:
+        iteration += 1
+        if iteration > 200:
+            raise ValueError("Can't seem to terminate")
+        if value < 1e-30:
             return float_to_vec(0)
         value /= 2
     return value
@@ -101,13 +107,15 @@ class GoldsteinTest(FindDistance):
         slope = function.grad()(float_to_vec(0))
 
         def condition_a(alpha: Vec) -> bool:
-            return all(function(alpha) < basepoint + self.epsilon * slope * alpha)
+            return all(function(alpha) <= basepoint + self.epsilon * slope * alpha)
 
         def condition_b(alpha: Vec) -> bool:
             return condition_a(alpha) and not (condition_a(alpha * 2))
 
         def condition_c(alpha: Vec) -> bool:
-            return all(function(alpha) > basepoint + (1 - self.epsilon) * slope * alpha)
+            return all(
+                function(alpha) >= basepoint + (1 - self.epsilon) * slope * alpha
+            )
 
         def condition_d(alpha: Vec) -> bool:
             return condition_c(alpha) and not (condition_c(alpha / 2))
@@ -122,6 +130,49 @@ class GoldsteinTest(FindDistance):
             alpha = step_doubling(condition_b, alpha)
         else:
             alpha = step_halving(condition_b, alpha)
+        beta = alpha / 2
+        if condition_c(beta):
+            beta = step_halving(condition_d, beta)
+        else:
+            beta = step_doubling(condition_d, beta)
+
+        return beta, alpha
+
+
+class StrongWolfe(FindDistance):
+    def __init__(self, epsilon: float = 0.0001):
+        """Epsilon is a magic constant."""
+        assert 0 < epsilon < 0.5
+        self.c1 = epsilon
+        self.c2 = 1 - epsilon
+
+    def _call(self, function: Function) -> tuple[Vec, Vec]:
+        basepoint = function(float_to_vec(0))
+        slope = function.grad()(float_to_vec(0))
+
+        def condition_a(alpha: Vec) -> bool:
+            return all(function(alpha) <= basepoint + self.c1 * slope * alpha)
+
+        def condition_b(alpha: Vec) -> bool:
+            return condition_a(alpha) and not (condition_a(alpha * 2))
+
+        def condition_c(alpha: Vec) -> bool:
+            return all(abs(function(alpha)) <= abs(basepoint) * self.c2)
+
+        def condition_d(alpha: Vec) -> bool:
+            return condition_c(alpha) and not (condition_c(alpha / 2))
+
+        alpha = float_to_vec(2)
+        beta = float_to_vec(1)
+        if slope > 0:
+            alpha *= -1
+            beta *= -1
+
+        if condition_a(alpha):
+            alpha = step_doubling(condition_b, alpha)
+        else:
+            alpha = step_halving(condition_b, alpha)
+        beta = alpha / 2
         if condition_c(beta):
             beta = step_halving(condition_d, beta)
         else:
