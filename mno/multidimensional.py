@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-from typing import cast
 import warnings
 from abc import ABC, abstractmethod
+from typing import cast
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+from mno.find_distance import FindDistance, GoldsteinTest
 from mno.function import Function
 from mno.linesearch import GoldenSearch, Linesearch
 from mno.my_types import Vec, array_to_vec, norm
 from mno.stopping_condition import (
     GradientNormCondition,
-    IterationCondition,
     StoppingCondition,
 )
-from mno.find_distance import AmijoTest, FindDistance, GoldsteinTest
 
 
 class MultidimensionalOptimalization(ABC):
@@ -85,20 +84,20 @@ class MultidimensionalOptimalization(ABC):
         assert self._function is not None
         x = np.linspace(-10, 10, 100)
         y = np.linspace(-10, 10, 100)
-        X, Y = np.meshgrid(x, y)
-        print(X)
-        Z = np.array(
+        x, y = np.meshgrid(x, y)
+        print(x)
+        z = np.array(
             [
                 [
-                    self._function(array_to_vec([X[i, j], Y[i, j]]))[0]
-                    for j in range(X.shape[1])
+                    self._function(array_to_vec([x[i, j], y[i, j]]))[0]
+                    for j in range(x.shape[1])
                 ]
-                for i in range(X.shape[0])
+                for i in range(x.shape[0])
             ]
         )
-        Zlog = np.log2(Z.min() + Z + 1)
-        print(Z.shape)
-        contour = axis.contourf(X, Y, Zlog, levels=100, cmap="viridis")
+        z_log = np.log2(z.min() + z + 1)
+        print(z.shape)
+        contour = axis.contourf(x, y, z_log, levels=100, cmap="viridis")
         plt.colorbar(contour, label="Function Value logged (Z)")
         axis.set_xlabel("X axis")
         axis.set_ylabel("Y axis")
@@ -114,6 +113,7 @@ class MultidimensionalOptimalization(ABC):
     def set_distance_finder(
         self, distance_finder: FindDistance
     ) -> MultidimensionalOptimalization:
+        """Set distance finder for linesearch bounds."""
         self._find_distance = distance_finder
         return self
 
@@ -161,9 +161,8 @@ def descend_step(
 ) -> Vec:
     """Do one step of congurated gradients method."""
     direction = -func.grad()(point)
-    D = distance_finder.with_direction(func, point, direction)
-    print(D)
-    return linesearch.set_interval(*D).solve()
+    d = distance_finder.with_direction(func, point, direction)
+    return linesearch.set_interval(*d).solve()
 
 
 def conjugateStep(
@@ -174,6 +173,7 @@ def conjugateStep(
     distance_finder: FindDistance,
     linesearch: Linesearch,
 ) -> Vec:
+    """Conjugate gradient step."""
     down = (gradients[-1] - gradients[-2]).dot(prev_direction)
     if abs(down) < 1e-9:
         print("Gradients are low", gradients, prev_direction)
@@ -184,12 +184,72 @@ def conjugateStep(
     ).solve()
 
 
+def DFP_step(
+    point: Vec,
+    func: Function,
+    matrix_s: np.ndarray,
+    distance_finder: FindDistance,
+    linesearch: Linesearch,
+):
+    g = func.grad()(point)
+    direction = -matrix_s.dot(g)
+    d = distance_finder.with_direction(func, point, direction)
+    new_point = linesearch.set_interval(*d).solve()
+    new_g = func.grad()(new_point)
+    p = new_point - point
+    q = new_g - g
+    p = p.reshape((-1, 1))
+    q = q.reshape((-1, 1))
+
+    new_matrix = (
+        matrix_s
+        + p @ p.T / (q.T @ p)
+        - (matrix_s @ q @ q.T @ matrix_s.T) / (q.T @ matrix_s @ q)
+    )
+    print(new_matrix)
+    return new_point, new_matrix
+
+
+def BFGS_step(
+    point: Vec,
+    func: Function,
+    matrix_s: np.ndarray,
+    distance_finder: FindDistance,
+    linesearch: Linesearch,
+):
+    g = func.grad()(point)
+    direction = -matrix_s.dot(g)
+    d = distance_finder.with_direction(func, point, direction)
+    new_point = linesearch.set_interval(*d).solve()
+    new_g = func.grad()(new_point)
+    s = new_point - point
+    y = new_g - g
+    s = s.reshape((-1, 1))
+    y = y.reshape((-1, 1))
+    print(s, y, s.T @ y)
+
+    print((s.T @ y + y.T @ matrix_s @ y), "part1")
+    print((s @ s.T), "part2")
+
+    new_matrix = (
+        matrix_s
+        + (s.T @ y + y.T @ matrix_s @ y) * (s @ s.T) / (s.T @ y) ** 2
+        - (matrix_s @ y @ s.T + s @ y.T @ matrix_s) / (s.T @ y)
+    )
+    print(new_matrix)
+    return new_point, new_matrix
+
+
 class GradientDescend(MultidimensionalOptimalization):
+    """Basic gradient descend method."""
+
     def _getstep(self, point: Vec, func: Function) -> Vec:
         return descend_step(point, func, self._find_distance, self._linesearch)
 
 
 class ConjugateGradient(MultidimensionalOptimalization):
+    """Conjugate gradient method Hestenes Stiefel style."""
+
     def __init__(self):
         super().__init__()
         self.prevG: list[Vec] = []
@@ -202,7 +262,10 @@ class ConjugateGradient(MultidimensionalOptimalization):
 
         self.prevG.append(func.grad()(point))
         if len(self.prevG) > 1 and all(self.prevG[-1] == self.prevG[-2]):
-            print("ERROR")
+            warnings.warn(
+                "Last step was zero. Probably didn't choose a direction of descend."
+                "Attempting to fix by using gradient descend."
+            )
             self.prevG = self.prevG[-1:]
 
         # not enough values to make a conjugated step
@@ -220,4 +283,63 @@ class ConjugateGradient(MultidimensionalOptimalization):
             )
             print("conjugate step")
         self.prev_direction = new_point - point
+        return new_point
+
+
+class BFGSMethod(MultidimensionalOptimalization):
+    """BFGS method."""
+
+    def __init__(self):
+        super().__init__()
+        self.matrix: np.ndarray | None = None
+
+    def _getstep(self, point: Vec, func: Function) -> Vec:
+        if self.matrix is None:
+            self.matrix = np.identity(func.get_dim()[0])
+        new_point, new_matrix = BFGS_step(
+            point, func, self.matrix, self._find_distance, self._linesearch
+        )
+        self.matrix = new_matrix
+        return new_point
+
+
+class DFPMethod(MultidimensionalOptimalization):
+    """BFGS method."""
+
+    def __init__(self):
+        super().__init__()
+        self.matrix: np.ndarray | None = None
+
+    def _getstep(self, point: Vec, func: Function) -> Vec:
+        if self.matrix is None:
+            self.matrix = np.identity(func.get_dim()[0])
+        new_point, new_matrix = DFP_step(
+            point, func, self.matrix, self._find_distance, self._linesearch
+        )
+        self.matrix = new_matrix
+        return new_point
+
+
+class BroydenMethod(MultidimensionalOptimalization):
+    """BroydenMethod."""
+
+    def __init__(self, value=0.5):
+        super().__init__()
+        self.value = value
+        self.bfgs: np.ndarray | None = None
+        self.dfp: np.ndarray | None = None
+
+    def _getstep(self, point: Vec, func: Function) -> Vec:
+        if self.bfgs is None:
+            self.bfgs = np.identity(func.get_dim()[0])
+        if self.dfp is None:
+            self.dfp = np.identity(func.get_dim()[0])
+        new_point, new_dfp = DFP_step(
+            point, func, self.dfp, self._find_distance, self._linesearch
+        )
+        new_point, new_bfgs = BFGS_step(
+            point, func, self.bfgs, self._find_distance, self._linesearch
+        )
+        self.dfp = new_dfp
+        self.bfgs = new_bfgs
         return new_point

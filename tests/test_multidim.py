@@ -4,13 +4,16 @@ from mno.find_distance import GoldsteinTest
 from mno.function import Function
 from mno.linesearch import GoldenSearch
 from mno.multidimensional import (
+    BFGSMethod,
+    BroydenMethod,
     ConjugateGradient,
+    DFPMethod,
     GradientDescend,
     MultidimensionalOptimalization,
 )
 from mno.my_types import Vec, array_to_vec, dot_prorduct
 
-methods = [GradientDescend, ConjugateGradient]
+methods = [GradientDescend, ConjugateGradient, DFPMethod, BFGSMethod, BroydenMethod]
 
 
 def add_methods_into_parametrization(*parametrization: tuple) -> list[tuple]:
@@ -111,66 +114,3 @@ def test_multidim_finds_solution_on_multi_dim_arbitrary_function(
     )
 
     assert all(abs(f.grad()(result)) < PRECISION)
-
-
-'''
-@pytest.mark.parametrize(
-    ("method", "k", "c", "x_0", "x_1"),
-    add_methods_into_parametrization(
-        (-1, 2, 0, -2),
-        (-3, -3, -2, -3),
-        (-0.0001, -1000, -10000, 1000),
-        (-1, -3, 1, 1),
-    ),
-)
-def test_multidim_finds_boundary_on_flipped_quadratic_function(
-    method: type[Linesearch], k: float, c: float, x_0: float, x_1: float
-) -> None:
-    """Linesearch should easily find minimum of quadratic function."""
-    assert k < 0, "Invalid dataset, k need to be positive!"
-    f = Function(lambda x: k * (x - x_0) * (x - x_1) + c, dim_in=1, dim_out=1)
-    attempt = (
-        method()
-        .set_function(f)
-        .set_interval(float_to_vec(x_0), float_to_vec(x_1))
-        .solve()
-    )
-    check_result(attempt, float_to_vec(x_0), float_to_vec(x_1))
-
-
-@pytest.mark.parametrize(
-    ("method", "function", "in_dim", "p1", "p2"),
-    add_methods_into_parametrization(
-        (
-            lambda a: a[2] ** 3 - a[1] ** 2 + 2 ** a[0],
-            3,
-            array_to_vec([3, 5, 2]),
-            array_to_vec([1, 7, 9]),
-        ),
-        (
-            lambda a: a[2] ** 3 + a[1] ** 2 + 2 ** a[0],
-            3,
-            array_to_vec([3, 5, 2]),
-            array_to_vec([-10, -7, -9]),
-        ),
-    ),
-)
-def test_linesearch_finds_local_minimum(
-    method: type[Linesearch],
-    function: callable,
-    in_dim: int,
-    p1: Vec,
-    p2: Vec,
-) -> None:
-    """Linesearch should find a point, where the neighbourhood's larger."""
-    STEP = 0.001
-    f = Function(function=function, dim_in=in_dim, dim_out=1)
-    attempt = method().set_function(f).set_interval(p1, p2).solve()
-    direction = p2 - p1
-    k = (attempt - p1)[0] / direction[0]
-    if k > STEP:
-        print("1")
-        assert f(attempt - direction * STEP) > f(attempt)
-    if k < 1 - STEP:
-        assert f(attempt + direction * STEP) > f(attempt)
-'''
