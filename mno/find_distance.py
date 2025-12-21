@@ -16,7 +16,6 @@ class FindDistance(ABC):
     ) -> tuple[Vec, Vec]:
         """Find optimal interval given by two points A B to find minimum on."""
         assert not any(np.isnan(direction)), "Direction Nan!"
-        print("direction is ", direction)
 
         def help(a):
             out = function(a * direction + point)
@@ -49,7 +48,7 @@ def step_doubling(condition: Callable[[Vec], bool], value: Vec) -> Vec:
     while not condition(value):
         iteration += 1
         if iteration > 200:
-            raise ValueError("Can't seem to terminate")
+            raise ValueError("FindDistance: Can't seem to terminate")
         assert not np.isinf(value), "Infinity!"
         value *= 2
     return value
@@ -61,7 +60,7 @@ def step_halving(condition: Callable[[Vec], bool], value: Vec) -> Vec:
     while not condition(value):
         iteration += 1
         if iteration > 200:
-            raise ValueError("Can't seem to terminate")
+            raise ValueError("FindDistance: Can't seem to terminate")
         if value < 1e-30:
             return float_to_vec(0)
         value /= 2

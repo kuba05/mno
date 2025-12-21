@@ -28,6 +28,7 @@ class MultidimensionalOptimalization(ABC):
         self._stopping_condition: StoppingCondition = GradientNormCondition()
         self._linesearch: Linesearch = GoldenSearch()
         self._find_distance: FindDistance = GoldsteinTest()  # AmijoTest()
+        self._iters_needed = None
 
     def set_function(self, function: Function) -> MultidimensionalOptimalization:
         """Set function to optimize."""
@@ -52,7 +53,6 @@ class MultidimensionalOptimalization(ABC):
 
     def _log_point(self, *points: Vec) -> None:
         self._logged_points.append(points)
-        # print("logged points", self._logged_points)
 
     def draw(self) -> None:
         """Draw metrics for the solver."""
@@ -66,7 +66,7 @@ class MultidimensionalOptimalization(ABC):
             fig, ax = plt.subplots(2)
         gradiant = self._function.grad()
         ax[0].set_title("Gradient")
-        ax[1].set_title("")
+        ax[1].set_title("Norm")
 
         x = list(range(len(logged)))
         grad: list[np.floating] = []
@@ -85,7 +85,6 @@ class MultidimensionalOptimalization(ABC):
         x = np.linspace(-10, 10, 100)
         y = np.linspace(-10, 10, 100)
         x, y = np.meshgrid(x, y)
-        print(x)
         z = np.array(
             [
                 [
@@ -96,7 +95,6 @@ class MultidimensionalOptimalization(ABC):
             ]
         )
         z_log = np.log2(z.min() + z + 1)
-        print(z.shape)
         contour = axis.contourf(x, y, z_log, levels=100, cmap="viridis")
         plt.colorbar(contour, label="Function Value logged (Z)")
         axis.set_xlabel("X axis")
@@ -104,11 +102,12 @@ class MultidimensionalOptimalization(ABC):
         x = []
         y = []
         for points in self._logged_points:
-            axis.scatter(*zip(*points))
             dx, dy = zip(*points)
             x += dx
             y += dy
-        axis.plot(x, y, color="gray")
+        axis.plot(x, y, alpha=0.5, zorder=1)
+        sc = axis.scatter(x, y, c=range(len(x)), cmap="plasma", zorder=2)
+        plt.colorbar(sc, label="Step number")
 
     def set_distance_finder(
         self, distance_finder: FindDistance
@@ -135,6 +134,9 @@ class MultidimensionalOptimalization(ABC):
         assert self._point is not None
         return self._solve()
 
+    def get_iters_needed(self) -> float | None:
+        return self._iters_needed
+
     @abstractmethod
     def _getstep(self, point: Vec, func: Function) -> Vec: ...
 
@@ -151,8 +153,8 @@ class MultidimensionalOptimalization(ABC):
             prev_point = point
             point = self._getstep(point, func)
             i += 1
-            print(i)
         self._log_point(point)
+        self._iters_needed = i
         return point
 
 
@@ -176,7 +178,9 @@ def conjugateStep(
     """Conjugate gradient step."""
     down = (gradients[-1] - gradients[-2]).dot(prev_direction)
     if abs(down) < 1e-9:
-        print("Gradients are low", gradients, prev_direction)
+        warnings.warn(
+            f"Gradients are low {gradients}, previous direction {prev_direction}"
+        )
     beta = (gradients[-1] - gradients[-2]).dot(gradients[-1]) / down
     direction = -gradients[-1] - beta * prev_direction
     return linesearch.set_interval(
@@ -206,7 +210,6 @@ def DFP_step(
         + p @ p.T / (q.T @ p)
         - (matrix_s @ q @ q.T @ matrix_s.T) / (q.T @ matrix_s @ q)
     )
-    print(new_matrix)
     return new_point, new_matrix
 
 
@@ -226,17 +229,11 @@ def BFGS_step(
     y = new_g - g
     s = s.reshape((-1, 1))
     y = y.reshape((-1, 1))
-    print(s, y, s.T @ y)
-
-    print((s.T @ y + y.T @ matrix_s @ y), "part1")
-    print((s @ s.T), "part2")
-
     new_matrix = (
         matrix_s
         + (s.T @ y + y.T @ matrix_s @ y) * (s @ s.T) / (s.T @ y) ** 2
         - (matrix_s @ y @ s.T + s @ y.T @ matrix_s) / (s.T @ y)
     )
-    print(new_matrix)
     return new_point, new_matrix
 
 
@@ -271,7 +268,6 @@ class ConjugateGradient(MultidimensionalOptimalization):
         # not enough values to make a conjugated step
         if len(self.prevG) == 1 or self.prev_direction is None:
             new_point = descend_step(point, func, self._find_distance, self._linesearch)
-            print("descend step")
         else:
             new_point = conjugateStep(
                 point,
@@ -281,7 +277,6 @@ class ConjugateGradient(MultidimensionalOptimalization):
                 self._find_distance,
                 self._linesearch,
             )
-            print("conjugate step")
         self.prev_direction = new_point - point
         return new_point
 
@@ -334,12 +329,12 @@ class BroydenMethod(MultidimensionalOptimalization):
             self.bfgs = np.identity(func.get_dim()[0])
         if self.dfp is None:
             self.dfp = np.identity(func.get_dim()[0])
-        new_point, new_dfp = DFP_step(
+        dfp_point, new_dfp = DFP_step(
             point, func, self.dfp, self._find_distance, self._linesearch
         )
-        new_point, new_bfgs = BFGS_step(
+        bfgs_point, new_bfgs = BFGS_step(
             point, func, self.bfgs, self._find_distance, self._linesearch
         )
         self.dfp = new_dfp
         self.bfgs = new_bfgs
-        return new_point
+        return self.value * bfgs_point + (1 - self.value) * dfp_point

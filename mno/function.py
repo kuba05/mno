@@ -21,6 +21,7 @@ class Function:
         dim_in: int,
         dim_out: int,
         derivative: Callable[[Vec], Vec] | None = None,
+        numerical_derivative_step: float = 0.01,
     ):
         """
         Create a general function over R.
@@ -37,6 +38,7 @@ class Function:
         self._dim_in = dim_in
         self._dim_out = dim_out
         self._derivative = derivative
+        self._numerical_derivative_step = numerical_derivative_step
 
     def __neg__(self) -> Function:
         """Unary minus."""
@@ -104,12 +106,14 @@ class Function:
         """Return the in dimension and out dimension of function."""
         return (self._dim_in, self._dim_out)
 
-    def numerical_grad(self, step: float = 0.01) -> Function:
+    def numerical_grad(self, step: float = 0) -> Function:
         """
         Find function's numerical gradient.
 
-        Uses central derivative with given step.
+        Uses central derivative with given step. If step is zero, default value is used instead.
         """
+        if step == 0:
+            step = self._numerical_derivative_step
 
         def helper(point: Vec) -> Vec:
             return (

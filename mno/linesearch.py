@@ -49,7 +49,7 @@ class Linesearch(ABC):
         self, stopping_condition: StoppingCondition
     ) -> Linesearch:
         """Set stopping condition for this linesearch."""
-        self.stopping_condition = stopping_condition
+        self._stopping_condition = stopping_condition
         return self
 
     def set_interval(self, point_a: Vec, point_b: Vec) -> Linesearch:
@@ -78,7 +78,6 @@ class Linesearch(ABC):
         for i, points in enumerate(self._logged_points):
             x = points
             y = [line_function(a) for a in x]
-            print(x, y)
             plt.scatter(x, y, s=100, label=f"Generation {i}")
         plt.legend()
         plt.show()
@@ -130,7 +129,6 @@ class TernarySearch(Linesearch):
                 left = left_mid
             else:
                 right = right_mid
-        print("Iteration", i)
 
         return (left + right) / 2
 
@@ -164,7 +162,6 @@ class GoldenSearch(Linesearch):
                 a = b
                 b = c
                 c = a + (d - a) * self.invphi
-        print("Iteration", i)
 
         return (a + d) / 2
 
