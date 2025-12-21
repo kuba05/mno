@@ -251,12 +251,12 @@ def autotests():
     We can enter a special format of the experiments we want to run and this will run them quickly for us.
     We do need to "manually" set the starting point, method and function in code tho.
     """
-    point = [0, 0, 0]
-    fce = p3
+    point = [0.25, 0]
+    fce = f2
     print(
         """\\begin{table}[!h]
 \\begin{center}
-\\caption{Perm function 0,3,1, Hestenes method, point $"""
+\\caption{Given 2D function, Broyden method, point $"""
         + str(point)
         + """$}
 \\begin{tabular}{ |c|c|c|c|c|c| } 
@@ -269,12 +269,12 @@ def autotests():
                 print("\\hline ")
                 continue
             der, eps, ls_crit, crit = map(float, line.strip().split())
-            iters = arbitrary_function_hestenes(
+            iters = arbitrary_function_broyden(
                 point,
                 fce,
                 linesearch_max_iter=1000,
                 max_iter=100,
-                derivative=None if der != 0 else autocompute_derivative(fce, 3),
+                derivative=None if der != 0 else autocompute_derivative(fce, 4),
                 num_step=der,
                 distance_finder_epsilon=10**eps,
                 linesearch_critical=10**ls_crit,
