@@ -232,7 +232,7 @@ def main_test_f2() -> None:
     # the given 4D function
 
     arbitrary_function_hestenes(
-        [0.25, 0.25, 0.25, 0.25],
+        [0.25, 0.25],
         f2,
         linesearch_max_iter=1000,
         max_iter=100,
@@ -302,3 +302,4 @@ def autotests():
 if __name__ == "__main__":
     # example of how to use
     main_test_f2()
+    main_test_h4()
