@@ -27,6 +27,7 @@ def arbitrary_function_broyden(
     critical: float = 0.0001,
     num_step: float = 0.01,
     draw: bool = True,
+    value: float = 0.5,
 ) -> float | None:
     """
     Find the minimum of an arbitrary function using the broyden's method.
@@ -34,7 +35,7 @@ def arbitrary_function_broyden(
     Function needs to be a callable. If derivative isn't provided, it is computed numerically.
     """
     broyden = (
-        BroydenMethod()
+        BroydenMethod(value)
         .set_distance_finder(StrongWolfe(epsilon=distance_finder_epsilon))
         .set_linesearch(
             GoldenSearch().set_stopping_condition(
@@ -299,7 +300,57 @@ def autotests():
 # Usefull for batch experiments
 # autotests()
 
+
+def experiment():
+    function = H4
+    dims = 4
+
+    def hest_helper(derivative=0, epsilon=10**-4, critical=10**-6):
+        return lambda point: (
+            arbitrary_function_hestenes(
+                point,
+                function,
+                linesearch_max_iter=1000,
+                max_iter=100,
+                derivative=None
+                if derivative != 0
+                else autocompute_derivative(function, dims),
+                num_step=derivative,
+                distance_finder_epsilon=epsilon,
+                linesearch_critical=critical,
+                critical=10**-9,
+                draw=False,
+            )
+        )
+
+    def broy_helper(derivative=0, epsilon=10**-4, critical=10**-6, value=0.5):
+        return lambda point: (
+            arbitrary_function_broyden(
+                point,
+                function,
+                linesearch_max_iter=1000,
+                max_iter=100,
+                derivative=None
+                if derivative != 0
+                else autocompute_derivative(function, dims),
+                num_step=derivative,
+                distance_finder_epsilon=epsilon,
+                linesearch_critical=critical,
+                critical=10**-9,
+                draw=False,
+                value=value,
+            )
+        )
+
+    methods = [hest_helper(), broy_helper()]
+    rng = np.random.default_rng()
+    rng = rng.random((10, dims))
+    data = [[m(r) for r in rng] for m in methods]
+    print([c.count(None) for c in data])
+
+
 if __name__ == "__main__":
     # example of how to use
-    main_test_f2()
-    main_test_h4()
+    experiment()
+    # main_test_f2()
+# main_test_h4()
